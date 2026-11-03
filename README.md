@@ -16,7 +16,7 @@ Dự án này là một hệ thống quản lý dịch vụ Sing-box bằng giao
 - Hệ điều hành Linux (Ubuntu/Debian/CentOS/AlmaLinux...)
 - Quyền root hoặc sudo
 - Kết nối internet để cài đặt và xin SSL
-- Sing-box core và các công cụ phụ trợ như jq, curl, openssl
+- Sing-box core và các công cụ phụ trợ như jq, curl, openssl, Python 3
 
 ## Cài đặt nhanh
 
@@ -166,12 +166,12 @@ Sau khi thêm node thành công, hệ thống sẽ:
 - Hoặc xoá tất cả node nếu chọn để trống
 - Hệ thống sẽ đóng port tương ứng trên firewall và reload cấu hình mới
 
-### 5) Đồng bộ node từ link Subscription
-- Chọn mục `5. Cập nhật Node từ link Subscription`, nhập link HTTPS; lần sau có thể nhấn Enter để dùng lại link đã lưu.
-- Hệ thống tải lại toàn bộ danh sách URI từ subscription (hỗ trợ nội dung thô hoặc Base64), loại bỏ URI trùng và lưu riêng trong `data/subscription_nodes.txt`.
-- Chọn mục `1. Danh sách Link kết nối` để xem cả link node server hiện có lẫn các URI vừa đồng bộ. Chạy lại mục 5 để lấy phiên bản mới nhất sau khi subscription thay đổi.
-- Nếu tải lỗi hoặc nội dung không có URI được hỗ trợ, danh sách cũ được giữ nguyên. Link và dữ liệu subscription chỉ lưu cục bộ trong `data/`.
-- Node subscription là thông tin kết nối máy khách, không phải cấu hình inbound của VPS. Vì vậy chúng không ghi đè `nodes.json`, không thay đổi cấu hình Sing-box hoặc khởi động lại dịch vụ; các chức năng tạo/cập nhật/xóa node server hiện có vẫn hoạt động độc lập.
+### 5) Tạo / xem link Subscription
+- Chọn mục `5. Tạo / xem link Subscription để sao chép`. Lần đầu chọn port; hệ thống tạo link có mã bảo vệ ngẫu nhiên và khởi động subscription server.
+- Sao chép link hiển thị vào ứng dụng quản lý proxy. Nội dung subscription được trả về dạng Base64 gồm toàn bộ link của các node server được hỗ trợ.
+- Khi thêm, sửa hoặc xoá node trên VPS, ứng dụng chỉ cần cập nhật subscription để tải danh sách mới; không cần đổi link.
+- Link được phục vụ động từ `nodes.json`, không sửa cấu hình Sing-box. Mở TCP port đã chọn trên firewall VPS và security group của nhà cung cấp nếu có.
+- Link dùng HTTP và chứa mã truy cập riêng; giữ bí mật link. Để mã hoá kết nối, hãy đặt HTTPS reverse proxy/domain phía trước endpoint.
 
 ---
 
@@ -300,6 +300,7 @@ vvc
 │   ├── nodes.sh
 │   ├── ssl.sh
 │   ├── system.sh
+│   ├── subscription_server.py
 │   └── utils.sh
 ├── templates/
 │   ├── config.base.json

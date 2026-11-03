@@ -9,11 +9,13 @@ BASE_DIR="/root/nast-singbox-vvc"
 
 # Xử lý Service chạy ngầm
 if [[ "$1" == "daemon" ]]; then
-    while true; do
-        # Các logic xử lý ngầm (api, reset pass, monitor port...) có thể để ở đây
-        sleep 60
-    done
-    exit 0
+    if [[ -f "$BASE_DIR/data/subscription.json" ]] &&
+        command -v python3 >/dev/null 2>&1 &&
+        jq -e '(.token | type == "string" and length >= 32) and (.port | type == "number" and . >= 1 and . <= 65535)' \
+            "$BASE_DIR/data/subscription.json" >/dev/null 2>&1; then
+        exec python3 "$BASE_DIR/modules/subscription_server.py"
+    fi
+    while true; do sleep 60; done
 fi
 
 # Load thư viện utils dùng chung
