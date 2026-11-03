@@ -1,0 +1,30 @@
+{
+  "type": "vless",
+  "tag": "vless-grpc-reality-{{PORT}}",
+  "listen": "::",
+  "listen_port": "{{PORT}}",
+  "users": [
+    {
+      "uuid": "{{UUID}}"
+    }
+  ],
+  "transport": {
+    "type": "grpc",
+    "service_name": "{{GRPC_SERVICE_NAME}}"
+  },
+  "tls": {
+    "enabled": true,
+    "server_name": "{{SNI}}",
+    "reality": {
+      "enabled": true,
+      "handshake": {
+        "server": "{{SNI}}",
+        "server_port": 443
+      },
+      "private_key": "{{PRIVATE_KEY}}",
+      "short_id": [
+        "{{SHORT_ID}}"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Sing-box VVC Manager Service
+After=network.target sing-box.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /root/nast-singbox-vvc/main.sh daemon
+Restart=always
+RestartSec=10
+LimitNOFILE=infinity
+
+[Install]
+WantedBy=multi-user.target

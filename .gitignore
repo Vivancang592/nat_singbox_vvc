@@ -1,0 +1,84 @@
+# Dữ liệu và cấu hình cục bộ (không commit)
+/data/
+/certs/
+
+# Tệp tạm thời
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+logs/
+*.out
+
+# IDE & Editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vim/
+*.iml
+
+# OS files
+.Spotlight-V100/
+.Trashes/
+ehthumbs.db
+
+# Backup files
+*.backup
+*.bak
+*.old
+*~
+*.swp
+
+# Node modules (nếu dùng npm)
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# SSH keys và certificates
+*.pem
+*.key
+*.pub
+*.crt
+!certs/README.md
+
+# Credentials và tokens (NEVER commit)
+.credentials
+.tokens
+secrets.json
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+
+# Test coverage
+coverage/
+.coverage
+
+# Temporary directories
+tmp/
+temp/
+.tmp/
+
+# Docker
+.dockerignore
+
+# Git local config
+.git/config.local

@@ -1,0 +1,21 @@
+{
+  "type": "hysteria2",
+  "tag": "hy2-{{PORT}}",
+  "listen": "::",
+  "listen_port": "{{PORT}}",
+  "users": [
+    {
+      "password": "{{PASSWORD}}"
+    }
+  ],
+  "up_mbps": "{{UP_MBPS}}",
+  "down_mbps": "{{DOWN_MBPS}}",
+  "tls": {
+    "enabled": true,
+    "alpn": [
+      "h3"
+    ],
+    "certificate_path": "{{CERT_PATH}}",
+    "key_path": "{{KEY_PATH}}"
+  }
+}

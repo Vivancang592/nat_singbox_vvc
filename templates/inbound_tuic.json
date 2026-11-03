@@ -1,0 +1,21 @@
+{
+  "type": "tuic",
+  "tag": "tuic-{{PORT}}",
+  "listen": "::",
+  "listen_port": "{{PORT}}",
+  "users": [
+    {
+      "uuid": "{{UUID}}",
+      "password": "{{PASSWORD}}"
+    }
+  ],
+  "congestion_control": "bbr",
+  "tls": {
+    "enabled": true,
+    "alpn": [
+      "h3"
+    ],
+    "certificate_path": "{{CERT_PATH}}",
+    "key_path": "{{KEY_PATH}}"
+  }
+}

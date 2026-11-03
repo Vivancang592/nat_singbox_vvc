@@ -1,0 +1,48 @@
+{
+  "log": {
+    "disabled": false,
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-remote",
+        "type": "udp",
+        "server": "1.1.1.1"
+      },
+      {
+        "tag": "dns-local",
+        "type": "udp",
+        "server": "8.8.8.8"
+      }
+    ],
+    "independent_cache": true
+  },
+  "inbounds": [],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "protocol": "dns",
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "block"
+      }
+    ],
+    "default_domain_resolver": "dns-local",
+    "final": "direct",
+    "auto_detect_interface": true
+  }
+}

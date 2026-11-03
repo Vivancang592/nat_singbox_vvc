@@ -1,0 +1,23 @@
+{
+  "type": "vless",
+  "tag": "vless-ws-tls-{{PORT}}",
+  "listen": "::",
+  "listen_port": "{{PORT}}",
+  "users": [
+    {
+      "uuid": "{{UUID}}"
+    }
+  ],
+  "transport": {
+    "type": "ws",
+    "path": "{{WS_PATH}}",
+    "max_early_data": 2048,
+    "early_data_header_name": "Sec-WebSocket-Protocol"
+  },
+  "tls": {
+    "enabled": true,
+    "server_name": "{{DOMAIN}}",
+    "certificate_path": "{{CERT_PATH}}",
+    "key_path": "{{KEY_PATH}}"
+  }
+}
