@@ -201,36 +201,24 @@ build_link() {
     local grpc_service="$9"
     local ws_path="${10:-/}"
     local pass="${11:-$pbk}"
-    local encoded_uuid encoded_pass encoded_vps_ip encoded_tag encoded_sni
-    local encoded_pbk encoded_sid encoded_grpc_service encoded_ws_path
-
-    encoded_uuid=$(jq -rn --arg value "$uuid" '$value | @uri')
-    encoded_pass=$(jq -rn --arg value "$pass" '$value | @uri')
-    encoded_vps_ip=$(jq -rn --arg value "$vps_ip" '$value | @uri')
-    encoded_tag=$(jq -rn --arg value "$tag" '$value | @uri')
-    encoded_sni=$(jq -rn --arg value "$sni" '$value | @uri')
-    encoded_pbk=$(jq -rn --arg value "$pbk" '$value | @uri')
-    encoded_sid=$(jq -rn --arg value "$sid" '$value | @uri')
-    encoded_grpc_service=$(jq -rn --arg value "$grpc_service" '$value | @uri')
-    encoded_ws_path=$(jq -rn --arg value "$ws_path" '$value | @uri')
 
     local link=""
     
     case "$protocol" in
         "hysteria2")
-            link="hysteria2://${encoded_uuid}@${encoded_vps_ip}:${port}/?sni=${encoded_sni}&insecure=1#${encoded_tag}"
+            link="hysteria2://${uuid}@${vps_ip}:${port}/?sni=${sni}&insecure=1#${tag}"
             ;;
         "tuic")
-            link="tuic://${encoded_uuid}:${encoded_pass}@${encoded_vps_ip}:${port}/?sni=${encoded_sni}&congestion_control=bbr&alpn=h3&allow_insecure=1&insecure=1#${encoded_tag}"
+            link="tuic://${uuid}:${pass}@${vps_ip}:${port}/?sni=${sni}&congestion_control=bbr&alpn=h3&allow_insecure=1&insecure=1#${tag}"
             ;;
         "vless-reality")
-            link="vless://${encoded_uuid}@${encoded_vps_ip}:${port}?security=reality&encryption=none&pbk=${encoded_pbk}&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=${encoded_sni}&sid=${encoded_sid}#${encoded_tag}"
+            link="vless://${uuid}@${vps_ip}:${port}?security=reality&encryption=none&pbk=${pbk}&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=${sni}&sid=${sid}#${tag}"
             ;;
         "vless-grpc-reality")
-            link="vless://${encoded_uuid}@${encoded_vps_ip}:${port}?security=reality&encryption=none&pbk=${encoded_pbk}&fp=chrome&type=grpc&serviceName=${encoded_grpc_service}&sni=${encoded_sni}&sid=${encoded_sid}#${encoded_tag}"
+            link="vless://${uuid}@${vps_ip}:${port}?security=reality&encryption=none&pbk=${pbk}&fp=chrome&type=grpc&serviceName=${grpc_service}&sni=${sni}&sid=${sid}#${tag}"
             ;;
         "vless-ws-tls")
-            link="vless://${encoded_uuid}@${encoded_vps_ip}:${port}?security=tls&encryption=none&type=ws&path=${encoded_ws_path}&sni=${encoded_sni}&allowInsecure=1&insecure=1#${encoded_tag}"
+            link="vless://${uuid}@${vps_ip}:${port}?security=tls&encryption=none&type=ws&path=${ws_path}&sni=${sni}&allowInsecure=1&insecure=1#${tag}"
             ;;
     esac
     

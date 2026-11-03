@@ -20,9 +20,9 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Cài đặt các gói phụ thuộc
-echo -e "${YELLOW}Đang cài đặt các gói phụ thuộc (curl, wget, jq, git, openssl, netcat, uuid-runtime, python3)...${NC}"
+echo -e "${YELLOW}Đang cài đặt các gói phụ thuộc (curl, wget, jq, git, openssl, netcat, uuid-runtime)...${NC}"
 apt-get update -y
-apt-get install -y curl wget jq git openssl netcat-openbsd uuid-runtime python3
+apt-get install -y curl wget jq git openssl netcat-openbsd uuid-runtime
 
 # Thiết lập thư mục và kéo mã nguồn từ git
 REPO_URL="https://github.com/Vivancang592/nat_singbox_vvc.git"
