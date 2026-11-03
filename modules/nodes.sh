@@ -10,6 +10,8 @@ DATA_DIR="$BASE_DIR/data"
 NODES_FILE="$DATA_DIR/nodes.json"
 DOMAIN_FILE="$DATA_DIR/domain.json"
 USERS_FILE="$DATA_DIR/users.json"
+SUBSCRIPTION_FILE="$DATA_DIR/subscription.json"
+SUBSCRIPTION_NODES_FILE="$DATA_DIR/subscription_nodes.txt"
 
 mkdir -p "$DATA_DIR"
 
@@ -572,8 +574,17 @@ list_nodes() {
     fi
     echo -e "${BLUE}================================================================${NC}"
 
-    if [ ! -s "$NODES_FILE" ] || [ "$(cat "$NODES_FILE")" = "[]" ]; then
-        echo -e "${YELLOW}Chưa có node nào được tạo.${NC}"
+    local count
+    count=$(jq '. | length' "$NODES_FILE" 2>/dev/null || echo 0)
+
+    if [ "$mode" = "select" ] && [ "$count" -eq 0 ]; then
+        echo -e "${YELLOW}Chưa có node server nào được tạo.${NC}"
+        echo -e "${CYAN}================================================================${NC}"
+        return 1
+    fi
+
+    if [ "$mode" != "select" ] && [ "$count" -eq 0 ] && [ ! -s "$SUBSCRIPTION_NODES_FILE" ]; then
+        echo -e "${YELLOW}Chưa có node nào được tạo hoặc đồng bộ.${NC}"
         echo -e "${CYAN}================================================================${NC}"
         return 1
     fi
@@ -582,9 +593,6 @@ list_nodes() {
     if [ -f "$USERS_FILE" ]; then
         default_uuid=$(jq -r '.[0].uuid // empty' "$USERS_FILE" 2>/dev/null)
     fi
-
-    local count
-    count=$(jq '. | length' "$NODES_FILE" 2>/dev/null || echo 0)
 
     for (( i=0; i<$count; i++ )); do
         local tag=$(jq -r ".[$i].tag" "$NODES_FILE")
@@ -611,8 +619,119 @@ list_nodes() {
         fi
     done
 
+    if [ "$mode" != "select" ] && [ -s "$SUBSCRIPTION_NODES_FILE" ]; then
+        echo -e "${CYAN}--- NODE ĐỒNG BỘ TỪ SUBSCRIPTION ---${NC}"
+        cat "$SUBSCRIPTION_NODES_FILE"
+    fi
+
     echo -e "${CYAN}================================================================${NC}"
     return 0
+}
+
+sync_subscription_nodes() {
+    local subscription_url=""
+    local saved_url=""
+    local download_file=""
+    local parsed_file=""
+    local decoded_file=""
+    local nodes_tmp=""
+    local subscription_tmp=""
+    local encoded=""
+
+    if [ -f "$SUBSCRIPTION_FILE" ]; then
+        saved_url=$(jq -r '.url // empty' "$SUBSCRIPTION_FILE" 2>/dev/null)
+    fi
+
+    read -r -p "Nhập link subscription HTTPS [Enter để dùng link đã lưu]: " subscription_url
+    subscription_url="${subscription_url:-$saved_url}"
+
+    if [ -z "$subscription_url" ]; then
+        echo -e "${RED}Chưa có link subscription để đồng bộ.${NC}"
+        return 1
+    fi
+
+    if [[ "$subscription_url" != https://* ]]; then
+        echo -e "${RED}Chỉ chấp nhận link HTTPS để bảo vệ thông tin subscription.${NC}"
+        return 1
+    fi
+
+    download_file=$(mktemp "$DATA_DIR/subscription-download.XXXXXX") || {
+        echo -e "${RED}Không thể tạo file tạm để tải subscription.${NC}"
+        return 1
+    }
+    parsed_file=$(mktemp "$DATA_DIR/subscription-parsed.XXXXXX") || {
+        rm -f "$download_file"
+        echo -e "${RED}Không thể tạo file tạm để xử lý subscription.${NC}"
+        return 1
+    }
+    decoded_file=$(mktemp "$DATA_DIR/subscription-decoded.XXXXXX") || {
+        rm -f "$download_file" "$parsed_file"
+        echo -e "${RED}Không thể tạo file tạm để giải mã subscription.${NC}"
+        return 1
+    }
+    nodes_tmp=$(mktemp "$DATA_DIR/subscription-nodes.XXXXXX") || {
+        rm -f "$download_file" "$parsed_file" "$decoded_file"
+        echo -e "${RED}Không thể tạo file tạm để lưu node.${NC}"
+        return 1
+    }
+    subscription_tmp=$(mktemp "$DATA_DIR/subscription-config.XXXXXX") || {
+        rm -f "$download_file" "$parsed_file" "$decoded_file" "$nodes_tmp"
+        echo -e "${RED}Không thể tạo file tạm để lưu link subscription.${NC}"
+        return 1
+    }
+
+    info "Đang tải danh sách node từ subscription..."
+    if ! curl --fail --location --silent --show-error --max-time 30 \
+        --proto '=https' --proto-redir '=https' \
+        --output "$download_file" "$subscription_url"; then
+        rm -f "$download_file" "$parsed_file" "$decoded_file" "$nodes_tmp" "$subscription_tmp"
+        echo -e "${RED}Không tải được subscription. Danh sách cũ được giữ nguyên.${NC}"
+        return 1
+    fi
+
+    tr -d '\r' < "$download_file" | sed '/^[[:space:]]*$/d' > "$decoded_file"
+    grep -E '^(vless|vmess|trojan|ss|hysteria|hysteria2|tuic|shadowtls|wireguard|ssh|anytls|juicity|mieru|socks|http|https)://' \
+        "$decoded_file" > "$parsed_file" || true
+
+    if [ ! -s "$parsed_file" ]; then
+        encoded=$(tr -d '[:space:]' < "$download_file" | tr '_-' '/+')
+        if [[ "$encoded" =~ ^[A-Za-z0-9+/]*={0,2}$ ]]; then
+            while [ $((${#encoded} % 4)) -ne 0 ]; do
+                encoded="${encoded}="
+            done
+            if printf '%s' "$encoded" | base64 --decode > "$decoded_file" 2>/dev/null; then
+                tr -d '\r' < "$decoded_file" | \
+                    grep -E '^(vless|vmess|trojan|ss|hysteria|hysteria2|tuic|shadowtls|wireguard|ssh|anytls|juicity|mieru|socks|http|https)://' \
+                    > "$parsed_file" || true
+            fi
+        fi
+    fi
+
+    if [ ! -s "$parsed_file" ]; then
+        rm -f "$download_file" "$parsed_file" "$decoded_file" "$nodes_tmp" "$subscription_tmp"
+        echo -e "${RED}Subscription không chứa URI node được hỗ trợ; dữ liệu cũ được giữ nguyên.${NC}"
+        return 1
+    fi
+
+    awk '!seen[$0]++' "$parsed_file" > "$nodes_tmp"
+    if ! jq -n --arg url "$subscription_url" '{url: $url}' > "$subscription_tmp"; then
+        rm -f "$download_file" "$parsed_file" "$decoded_file" "$nodes_tmp" "$subscription_tmp"
+        echo -e "${RED}Không thể lưu cấu hình subscription.${NC}"
+        return 1
+    fi
+
+    if ! mv "$nodes_tmp" "$SUBSCRIPTION_NODES_FILE" ||
+        ! mv "$subscription_tmp" "$SUBSCRIPTION_FILE"; then
+        rm -f "$download_file" "$parsed_file" "$decoded_file" "$nodes_tmp" "$subscription_tmp"
+        echo -e "${RED}Không thể lưu dữ liệu subscription.${NC}"
+        return 1
+    fi
+
+    chmod 600 "$SUBSCRIPTION_FILE" "$SUBSCRIPTION_NODES_FILE"
+    local synced_count
+    synced_count=$(wc -l < "$SUBSCRIPTION_NODES_FILE" | tr -d ' ')
+    rm -f "$download_file" "$parsed_file" "$decoded_file" "$nodes_tmp" "$subscription_tmp"
+    success "Đồng bộ thành công $synced_count node. Chọn mục 1 để xem toàn bộ link."
 }
 
 update_node() {
@@ -789,9 +908,10 @@ while true; do
     echo -e " ${GREEN}2.${NC} Thêm Node mới"
     echo -e " ${GREEN}3.${NC} Cập nhật Node"
     echo -e " ${GREEN}4.${NC} Xóa Node"
+    echo -e " ${GREEN}5.${NC} Cập nhật Node từ link Subscription"
     echo -e " ${RED}0.${NC} Quay lại Menu chính"
     echo -e "${CYAN}================================================================${NC}"
-    read -p " Vui lòng chọn chức năng [0-4]: " choice
+    read -p " Vui lòng chọn chức năng [0-5]: " choice
 
     case $choice in
         1)
@@ -806,6 +926,10 @@ while true; do
             ;;
         4)
             delete_node
+            ;;
+        5)
+            sync_subscription_nodes
+            read -n 1 -s -r -p "Nhấn phím bất kỳ để tiếp tục..."
             ;;
         0)
             break
