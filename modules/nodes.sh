@@ -779,170 +779,6 @@ delete_node() {
     sleep 2
 }
 
-setup_subscription() {
-    local cert_dir="$BASE_DIR/certs"
-    local cert_files=()
-    local certificate key_file cert_domain domain port token
-    local choice current_port
-
-    shopt -s nullglob
-    cert_files=("$cert_dir"/*.crt)
-    shopt -u nullglob
-
-    if [[ -f "$DATA_DIR/subscription.json" ]] &&
-        systemctl is-active --quiet vvc-subscription.service; then
-        domain=$(jq -r '.domain // empty' "$DATA_DIR/subscription.json")
-        port=$(jq -r '.port // empty' "$DATA_DIR/subscription.json")
-        token=$(jq -r '.token // empty' "$DATA_DIR/subscription.json")
-        if [[ -n "$domain" && -n "$port" && -n "$token" ]]; then
-            echo
-            success "Link Subscription hiện tại:"
-            echo -e "${YELLOW}https://${domain}:${port}/sub/${token}${NC}"
-            echo -e "${CYAN}Link luôn trả về danh sách node mới nhất khi ứng dụng làm mới subscription.${NC}"
-            read -r -p "Nhấn Enter để tiếp tục..."
-            return
-        fi
-    fi
-
-    if [[ ${#cert_files[@]} -eq 0 ]]; then
-        echo -e "${RED}Chưa có chứng chỉ SSL. Hãy tạo chứng chỉ trong mục Quản Lý SSL Cloudflare trước.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-
-    echo -e "${CYAN}Chọn chứng chỉ SSL hợp lệ cho tên miền subscription:${NC}"
-    local index=1
-    for certificate in "${cert_files[@]}"; do
-        key_file="${certificate%.crt}.key"
-        if [[ -f "$key_file" ]]; then
-            echo " $index. $(basename "$certificate" .crt)"
-            index=$((index + 1))
-        fi
-    done
-    if [[ "$index" -eq 1 ]]; then
-        echo -e "${RED}Không tìm thấy cặp chứng chỉ .crt và private key .key.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-
-    read -r -p "Chọn chứng chỉ: " choice
-    if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}Lựa chọn chứng chỉ không hợp lệ.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-    choice=$((10#$choice))
-    if ((choice < 1 || choice >= index)); then
-        echo -e "${RED}Lựa chọn chứng chỉ không hợp lệ.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-
-    index=0
-    for certificate in "${cert_files[@]}"; do
-        key_file="${certificate%.crt}.key"
-        if [[ -f "$key_file" ]]; then
-            index=$((index + 1))
-            if [[ "$index" -eq "$choice" ]]; then
-                break
-            fi
-        fi
-    done
-    key_file="${certificate%.crt}.key"
-    cert_domain=$(basename "$certificate" .crt)
-    read -r -p "Tên miền subscription [$cert_domain]: " domain
-    domain="${domain:-$cert_domain}"
-    if ! openssl x509 -in "$certificate" -checkhost "$domain" -noout >/dev/null 2>&1; then
-        echo -e "${RED}Chứng chỉ không hợp lệ hoặc không bao phủ tên miền $domain.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-
-    current_port=""
-    if [[ -f "$DATA_DIR/subscription.json" ]]; then
-        current_port=$(jq -r '.port // empty' "$DATA_DIR/subscription.json" 2>/dev/null)
-    fi
-    port="${current_port:-8443}"
-    read -r -p "Port HTTPS cho subscription [$port]: " choice
-    port="${choice:-$port}"
-    if [[ ! "$port" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}Port không hợp lệ.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-    port=$((10#$port))
-    if ((port < 1 || port > 65535)); then
-        echo -e "${RED}Port không hợp lệ.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-    if ! check_port_usage "$port"; then
-        echo -e "${RED}Port $port đang được node hoặc dịch vụ khác sử dụng.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-
-    if ! command -v python3 >/dev/null 2>&1; then
-        info "Đang cài Python 3 để chạy dịch vụ subscription..."
-        if ! apt-get update -y || ! apt-get install -y python3; then
-            echo -e "${RED}Không thể cài Python 3; dịch vụ subscription chưa được bật.${NC}"
-            read -r -p "Nhấn Enter để tiếp tục..."
-            return
-        fi
-    fi
-    token=$(jq -r '.token // empty' "$DATA_DIR/subscription.json" 2>/dev/null)
-    if [[ -z "$token" ]]; then
-        token=$(openssl rand -hex 32) || {
-            echo -e "${RED}Không thể tạo token subscription.${NC}"
-            read -r -p "Nhấn Enter để tiếp tục..."
-            return
-        }
-    fi
-
-    mkdir -p "$DATA_DIR"
-    if ! (umask 077; jq -n \
-        --arg token "$token" \
-        --arg domain "$domain" \
-        --arg cert "$certificate" \
-        --arg key "$key_file" \
-        --argjson port "$port" \
-        '{token: $token, domain: $domain, cert: $cert, key: $key, port: $port}' \
-        > "$DATA_DIR/subscription.json.tmp"); then
-        rm -f "$DATA_DIR/subscription.json.tmp"
-        echo -e "${RED}Không thể tạo cấu hình subscription.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-    mv "$DATA_DIR/subscription.json.tmp" "$DATA_DIR/subscription.json"
-    chmod 600 "$DATA_DIR/subscription.json"
-
-    if ! cp "$BASE_DIR/templates/subscription.service" /etc/systemd/system/vvc-subscription.service; then
-        echo -e "${RED}Không thể cài đặt systemd service subscription.${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-    open_firewall_port "$port"
-    if ! systemctl daemon-reload ||
-        ! systemctl enable vvc-subscription.service ||
-        ! systemctl restart vvc-subscription.service; then
-        echo -e "${RED}Không thể khởi động dịch vụ subscription. Kiểm tra: journalctl -u vvc-subscription -e${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-    if ! systemctl is-active --quiet vvc-subscription.service; then
-        echo -e "${RED}Dịch vụ subscription chưa hoạt động. Kiểm tra: journalctl -u vvc-subscription -e${NC}"
-        read -r -p "Nhấn Enter để tiếp tục..."
-        return
-    fi
-
-    echo
-    success "Subscription HTTPS đã sẵn sàng. URL này tự lấy danh sách node mới mỗi lần app cập nhật:"
-    echo -e "${YELLOW}https://${domain}:${port}/sub/${token}${NC}"
-    echo -e "${CYAN}Hãy dán URL này vào mục Subscription/Remote profile trong app. Bảo mật URL như mật khẩu.${NC}"
-    echo -e "${CYAN}Đảm bảo DNS của domain trỏ về VPS và port TCP $port được mở trên firewall/provider.${NC}"
-    read -r -p "Nhấn Enter để tiếp tục..."
-}
-
 # Menu chính của module
 while true; do
     clear
@@ -953,10 +789,9 @@ while true; do
     echo -e " ${GREEN}2.${NC} Thêm Node mới"
     echo -e " ${GREEN}3.${NC} Cập nhật Node"
     echo -e " ${GREEN}4.${NC} Xóa Node"
-    echo -e " ${GREEN}5.${NC} Tạo / cập nhật link Subscription"
     echo -e " ${RED}0.${NC} Quay lại Menu chính"
     echo -e "${CYAN}================================================================${NC}"
-    read -p " Vui lòng chọn chức năng [0-5]: " choice
+    read -p " Vui lòng chọn chức năng [0-4]: " choice
 
     case $choice in
         1)
@@ -971,9 +806,6 @@ while true; do
             ;;
         4)
             delete_node
-            ;;
-        5)
-            setup_subscription
             ;;
         0)
             break

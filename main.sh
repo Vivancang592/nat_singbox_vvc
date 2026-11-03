@@ -40,13 +40,12 @@ uninstall_system() {
     fi
     
     info "Đang tiến hành dừng các dịch vụ ngầm..."
-    systemctl stop sing-box manager vvc-subscription
-    systemctl disable sing-box manager vvc-subscription
+    systemctl stop sing-box manager
+    systemctl disable sing-box manager
     
     info "Đang xoá systemd services..."
     rm -f /etc/systemd/system/sing-box.service
     rm -f /etc/systemd/system/manager.service
-    rm -f /etc/systemd/system/vvc-subscription.service
     systemctl daemon-reload
     
     info "Đang xoá lõi Sing-box..."
