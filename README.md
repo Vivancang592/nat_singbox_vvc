@@ -172,6 +172,7 @@ Sau khi thêm node thành công, hệ thống sẽ:
 - Khi thêm, sửa hoặc xoá node trên VPS, ứng dụng chỉ cần cập nhật subscription để tải danh sách mới; không cần đổi link.
 - Link được phục vụ động từ `nodes.json`, không sửa cấu hình Sing-box. Mở TCP port đã chọn trên firewall VPS và security group của nhà cung cấp nếu có.
 - Link dùng HTTP và chứa mã truy cập riêng; giữ bí mật link. Để mã hoá kết nối, hãy đặt HTTPS reverse proxy/domain phía trước endpoint.
+- Muốn đổi port sau khi tạo link, chọn mục `6. Đổi port Subscription`; hệ thống giữ nguyên token nhưng tạo link mới với port mới. Cập nhật link mới trong ứng dụng và mở TCP port mới trên security group nếu cần.
 
 ---
 

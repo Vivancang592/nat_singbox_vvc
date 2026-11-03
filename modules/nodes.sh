@@ -648,6 +648,106 @@ open_subscription_firewall_port() {
     fi
 }
 
+close_subscription_firewall_port() {
+    local port=$1
+
+    if grep -q "\"port\": *$port\b" "$NODES_FILE" 2>/dev/null; then
+        echo -e "${YELLOW}Port cũ $port đang được node sử dụng; giữ nguyên luật firewall của port này.${NC}"
+        return
+    fi
+    if command -v ufw >/dev/null 2>&1; then
+        ufw delete allow "${port}/tcp" >/dev/null 2>&1
+    fi
+    if command -v firewall-cmd >/dev/null 2>&1; then
+        firewall-cmd --remove-port="${port}/tcp" --permanent >/dev/null 2>&1
+        firewall-cmd --reload >/dev/null 2>&1
+    fi
+    if command -v iptables >/dev/null 2>&1; then
+        while iptables -C INPUT -p tcp --dport "$port" -j ACCEPT >/dev/null 2>&1; do
+            iptables -D INPUT -p tcp --dport "$port" -j ACCEPT >/dev/null 2>&1 || break
+        done
+        if command -v netfilter-persistent >/dev/null 2>&1; then
+            netfilter-persistent save >/dev/null 2>&1
+        fi
+    fi
+}
+
+change_subscription_port() {
+    local token old_port new_port config_tmp status
+
+    if [ ! -f "$SUBSCRIPTION_FILE" ] ||
+        ! jq -e '(.token | type == "string" and length >= 32) and (.port | type == "number" and . >= 1 and . <= 65535)' \
+            "$SUBSCRIPTION_FILE" >/dev/null 2>&1; then
+        echo -e "${RED}Chưa có cấu hình subscription hợp lệ. Hãy chọn mục 5 để tạo link trước.${NC}"
+        return 1
+    fi
+
+    token=$(jq -r '.token' "$SUBSCRIPTION_FILE")
+    old_port=$(jq -r '.port' "$SUBSCRIPTION_FILE")
+    read -r -p "Nhập port subscription mới (đang dùng: ${old_port}): " new_port
+    if ! [[ "$new_port" =~ ^[0-9]{1,5}$ ]]; then
+        echo -e "${RED}Port không hợp lệ.${NC}"
+        return 1
+    fi
+    new_port=$((10#$new_port))
+    if [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+        echo -e "${RED}Port không hợp lệ.${NC}"
+        return 1
+    fi
+    if [ "$new_port" -eq "$old_port" ]; then
+        echo -e "${YELLOW}Port mới trùng với port hiện tại; không có thay đổi.${NC}"
+        return 0
+    fi
+    if ! check_port_usage "$new_port"; then
+        echo -e "${RED}Port $new_port đang được sử dụng, vui lòng chọn port khác.${NC}"
+        return 1
+    fi
+
+    config_tmp=$(mktemp "$DATA_DIR/subscription.XXXXXX") || {
+        echo -e "${RED}Không thể tạo file cấu hình subscription.${NC}"
+        return 1
+    }
+    if ! jq -n --arg token "$token" --argjson port "$new_port" \
+        '{token: $token, port: $port}' > "$config_tmp" ||
+        ! chmod 600 "$config_tmp" ||
+        ! mv "$config_tmp" "$SUBSCRIPTION_FILE"; then
+        rm -f "$config_tmp"
+        echo -e "${RED}Không thể lưu cấu hình subscription.${NC}"
+        return 1
+    fi
+
+    open_subscription_firewall_port "$new_port"
+    if systemctl restart manager; then
+        for _ in {1..5}; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 \
+                "http://127.0.0.1:${new_port}/sub/${token}" 2>/dev/null || true)
+            [[ "$status" == "200" || "$status" == "503" ]] && break
+            sleep 1
+        done
+        if [[ "$status" == "200" || "$status" == "503" ]]; then
+            close_subscription_firewall_port "$old_port"
+            echo -e "${GREEN}Đã đổi port subscription từ $old_port sang $new_port.${NC}"
+            echo -e "${YELLOW}Link cũ không còn dùng được; chọn mục 5 để xem link mới và cập nhật trong app.${NC}"
+            return 0
+        fi
+    fi
+
+    if jq -n --arg token "$token" --argjson port "$old_port" \
+        '{token: $token, port: $port}' > "$config_tmp" &&
+        chmod 600 "$config_tmp" &&
+        mv "$config_tmp" "$SUBSCRIPTION_FILE"; then
+        if systemctl restart manager; then
+            echo -e "${RED}Không thể khởi động subscription trên port $new_port. Đã khôi phục port cũ $old_port.${NC}"
+        else
+            echo -e "${RED}Không thể khởi động subscription trên port $new_port; đã khôi phục cấu hình cổng cũ nhưng restart dịch vụ thất bại. Kiểm tra: systemctl status manager${NC}"
+        fi
+    else
+        rm -f "$config_tmp"
+        echo -e "${RED}Không thể chạy subscription trên port $new_port và cũng không khôi phục được cấu hình. Hãy kiểm tra $SUBSCRIPTION_FILE và systemctl status manager.${NC}"
+    fi
+    return 1
+}
+
 show_subscription_link() {
     local token=""
     local port=""
@@ -906,9 +1006,10 @@ while true; do
     echo -e " ${GREEN}3.${NC} Cập nhật Node"
     echo -e " ${GREEN}4.${NC} Xóa Node"
     echo -e " ${GREEN}5.${NC} Tạo / xem link Subscription để sao chép"
+    echo -e " ${GREEN}6.${NC} Đổi port Subscription"
     echo -e " ${RED}0.${NC} Quay lại Menu chính"
     echo -e "${CYAN}================================================================${NC}"
-    read -p " Vui lòng chọn chức năng [0-5]: " choice
+    read -p " Vui lòng chọn chức năng [0-6]: " choice
 
     case $choice in
         1)
@@ -926,6 +1027,10 @@ while true; do
             ;;
         5)
             show_subscription_link
+            read -n 1 -s -r -p "Nhấn phím bất kỳ để tiếp tục..."
+            ;;
+        6)
+            change_subscription_port
             read -n 1 -s -r -p "Nhấn phím bất kỳ để tiếp tục..."
             ;;
         0)
