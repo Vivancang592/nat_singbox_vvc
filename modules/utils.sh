@@ -201,26 +201,92 @@ build_link() {
     local grpc_service="$9"
     local ws_path="${10:-/}"
     local pass="${11:-$pbk}"
-    
+    local encoded_uuid encoded_pass encoded_vps_ip encoded_tag encoded_sni
+    local encoded_pbk encoded_sid encoded_grpc_service encoded_ws_path
+
+    encoded_uuid=$(jq -rn --arg value "$uuid" '$value | @uri')
+    encoded_pass=$(jq -rn --arg value "$pass" '$value | @uri')
+    encoded_vps_ip=$(jq -rn --arg value "$vps_ip" '$value | @uri')
+    encoded_tag=$(jq -rn --arg value "$tag" '$value | @uri')
+    encoded_sni=$(jq -rn --arg value "$sni" '$value | @uri')
+    encoded_pbk=$(jq -rn --arg value "$pbk" '$value | @uri')
+    encoded_sid=$(jq -rn --arg value "$sid" '$value | @uri')
+    encoded_grpc_service=$(jq -rn --arg value "$grpc_service" '$value | @uri')
+    encoded_ws_path=$(jq -rn --arg value "$ws_path" '$value | @uri')
+
     local link=""
     
     case "$protocol" in
         "hysteria2")
-            link="hysteria2://${uuid}@${vps_ip}:${port}/?sni=${sni}&insecure=1#${tag}"
+            link="hysteria2://${encoded_uuid}@${encoded_vps_ip}:${port}/?sni=${encoded_sni}&insecure=1#${encoded_tag}"
             ;;
         "tuic")
-            link="tuic://${uuid}:${pass}@${vps_ip}:${port}/?sni=${sni}&congestion_control=bbr&alpn=h3&allow_insecure=1&insecure=1#${tag}"
+            link="tuic://${encoded_uuid}:${encoded_pass}@${encoded_vps_ip}:${port}/?sni=${encoded_sni}&congestion_control=bbr&alpn=h3&allow_insecure=1&insecure=1#${encoded_tag}"
             ;;
         "vless-reality")
-            link="vless://${uuid}@${vps_ip}:${port}?security=reality&encryption=none&pbk=${pbk}&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=${sni}&sid=${sid}#${tag}"
+            link="vless://${encoded_uuid}@${encoded_vps_ip}:${port}?security=reality&encryption=none&pbk=${encoded_pbk}&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=${encoded_sni}&sid=${encoded_sid}#${encoded_tag}"
             ;;
         "vless-grpc-reality")
-            link="vless://${uuid}@${vps_ip}:${port}?security=reality&encryption=none&pbk=${pbk}&fp=chrome&type=grpc&serviceName=${grpc_service}&sni=${sni}&sid=${sid}#${tag}"
+            link="vless://${encoded_uuid}@${encoded_vps_ip}:${port}?security=reality&encryption=none&pbk=${encoded_pbk}&fp=chrome&type=grpc&serviceName=${encoded_grpc_service}&sni=${encoded_sni}&sid=${encoded_sid}#${encoded_tag}"
             ;;
         "vless-ws-tls")
-            link="vless://${uuid}@${vps_ip}:${port}?security=tls&encryption=none&type=ws&path=${ws_path}&sni=${sni}&allowInsecure=1&insecure=1#${tag}"
+            link="vless://${encoded_uuid}@${encoded_vps_ip}:${port}?security=tls&encryption=none&type=ws&path=${encoded_ws_path}&sni=${encoded_sni}&allowInsecure=1&insecure=1#${encoded_tag}"
             ;;
     esac
     
     echo "$link"
+}
+
+export_subscription_links() {
+    local nodes_file="$DATA_DIR/nodes.json"
+    local users_file="$DATA_DIR/users.json"
+
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "jq is required to build the node subscription." >&2
+        return 1
+    fi
+    if [[ ! -f "$nodes_file" || ! -f "$users_file" ]] ||
+        ! jq -e 'type == "array"' "$nodes_file" >/dev/null 2>&1 ||
+        ! jq -e 'type == "array"' "$users_file" >/dev/null 2>&1; then
+        echo "Node or user data is missing or invalid." >&2
+        return 1
+    fi
+
+    local default_uuid
+    default_uuid=$(jq -r '.[0].uuid // empty' "$users_file")
+    local node_count
+    node_count=$(jq 'length' "$nodes_file")
+    local exported=0
+
+    for ((i = 0; i < node_count; i++)); do
+        local protocol uuid domain port tag sni pbk sid grpc_service ws_path node_pass link
+        protocol=$(jq -r ".[$i].protocol // empty" "$nodes_file")
+        uuid="$default_uuid"
+        [[ -n "$uuid" ]] || uuid=$(jq -r ".[$i].uuid // empty" "$nodes_file")
+        domain=$(jq -r ".[$i].domain // empty" "$nodes_file")
+        port=$(jq -r ".[$i].port // empty" "$nodes_file")
+        tag=$(jq -r ".[$i].tag // empty" "$nodes_file")
+        sni=$(jq -r ".[$i].server_name // .[$i].domain // empty" "$nodes_file")
+        pbk=$(jq -r ".[$i].public_key // empty" "$nodes_file")
+        sid=$(jq -r ".[$i].short_id // empty" "$nodes_file")
+        grpc_service=$(jq -r ".[$i].service_name // empty" "$nodes_file")
+        ws_path=$(jq -r ".[$i].ws_path // \"/\"" "$nodes_file")
+        node_pass=$(jq -r ".[$i].password // empty" "$nodes_file")
+
+        if [[ -z "$uuid" || -z "$domain" || -z "$port" || -z "$tag" ]]; then
+            echo "Node at index $i is missing required connection data." >&2
+            return 1
+        fi
+
+        link=$(build_link "$protocol" "$uuid" "$domain" "$port" "$tag" "$sni" "$pbk" "$sid" "$grpc_service" "$ws_path" "$node_pass")
+        if [[ -n "$link" ]]; then
+            printf '%s\n' "$link"
+            exported=$((exported + 1))
+        fi
+    done
+
+    if [[ "$exported" -eq 0 ]]; then
+        echo "There are no supported nodes to include in the subscription." >&2
+        return 1
+    fi
 }

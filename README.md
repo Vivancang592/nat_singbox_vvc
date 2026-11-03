@@ -9,6 +9,7 @@ Dự án này là một hệ thống quản lý dịch vụ Sing-box bằng giao
 - Tạo và xoá node theo loại giao thức
 - Khởi động, dừng, khởi động lại Sing-box
 - Quản lý SSL Cloudflare
+- Xuất link subscription HTTPS để ứng dụng tự cập nhật toàn bộ node
 - Cập nhật hệ thống / gỡ cài đặt
 
 ## Yêu cầu
@@ -104,6 +105,7 @@ Khi chọn 1 trong menu chính, bạn vào submenu node:
  2. Thêm Node mới
  3. Cập nhật Node
  4. Xóa Node
+ 5. Tạo / cập nhật link Subscription
  0. Quay lại Menu chính
 ================================================================
 ```
@@ -165,6 +167,14 @@ Sau khi thêm node thành công, hệ thống sẽ:
 - Có thể xoá từng node theo số thứ tự
 - Hoặc xoá tất cả node nếu chọn để trống
 - Hệ thống sẽ đóng port tương ứng trên firewall và reload cấu hình mới
+
+### 5) Tạo / cập nhật link Subscription
+1. Tạo chứng chỉ SSL cho tên miền đã trỏ DNS về VPS trong mục **Quản Lý SSL Cloudflare**.
+2. Trong **Quản Lý Node Server**, chọn **5. Tạo / cập nhật link Subscription**.
+3. Chọn chứng chỉ khớp tên miền và port HTTPS. Mở port TCP đó trên firewall VPS và firewall của nhà cung cấp nếu có.
+4. Sao chép URL HTTPS được hiển thị và thêm vào ứng dụng có hỗ trợ subscription dạng danh sách URI/base64 ở mục Subscription/Remote profile.
+
+URL được bảo vệ bằng token riêng tư và HTTPS. Mỗi lần ứng dụng làm mới subscription, máy chủ tạo lại danh sách từ các node hiện có; thêm, sửa hoặc xóa node không cần dán URL mới. Ứng dụng vẫn cần làm mới subscription để nhận thay đổi. Không chia sẻ URL này công khai. Nếu chưa có chứng chỉ SSL, hãy tạo chứng chỉ trước khi bật subscription.
 
 ---
 
